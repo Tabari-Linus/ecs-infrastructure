@@ -248,73 +248,13 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
 
 
-  # ALBSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   Properties:
-  #     GroupName: !Sub '${ProjectName}-${Environment}-alb-sg'
-  #     GroupDescription: 'Security group for Application Load Balancer'
-  #     VpcId: 
-  #       Fn::ImportValue: !Sub '${ProjectName}-${Environment}-VPCId'
-  #     SecurityGroupIngress:
-  #       # Allow HTTP from anywhere (internet)
-  #       - IpProtocol: tcp
-  #         FromPort: 80
-  #         ToPort: 80
-  #         CidrIp: 0.0.0.0/0
-  #         Description: 'HTTP access from internet'
-  #       # Allow HTTPS from anywhere (internet) - for future SSL setup
-  #       - IpProtocol: tcp
-  #         FromPort: 443
-  #         ToPort: 443
-  #         CidrIp: 0.0.0.0/0
-  #         Description: 'HTTPS access from internet'
-  #     SecurityGroupEgress:
-  #       # Allow all outbound traffic
-  #       - IpProtocol: -1
-  #         CidrIp: 0.0.0.0/0
-  #         Description: 'All outbound traffic'
-  #     Tags:
-  #       - Key: Name
-  #         Value: !Sub '${ProjectName}-${Environment}-alb-sg'
-  #       - Key: Environment
-  #         Value: !Ref Environment
-  #       - Key: Purpose
-  #         Value: 'LoadBalancer'
-
-  # # Security Group for ECS Tasks
-  # ECSSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   Properties:
-  #     GroupName: !Sub '${ProjectName}-${Environment}-ecs-sg'
-  #     GroupDescription: 'Security group for ECS tasks'
-  #     VpcId: 
-  #       Fn::ImportValue: !Sub '${ProjectName}-${Environment}-VPCId'
-  #     SecurityGroupIngress:
-  #       # Allow traffic from ALB only on port 8080 (Java app port)
-  #       - IpProtocol: tcp
-  #         FromPort: 8080
-  #         ToPort: 8080
-  #         SourceSecurityGroupId: !Ref ALBSecurityGroup
-  #         Description: 'HTTP access from ALB'
-  #     SecurityGroupEgress:
-  #       # Allow all outbound traffic (needed for ECR pulls, internet access via NAT)
-  #       - IpProtocol: -1
-  #         CidrIp: 0.0.0.0/0
-  #         Description: 'All outbound traffic'
-  #     Tags:
-  #       - Key: Name
-  #         Value: !Sub '${ProjectName}-${Environment}-ecs-sg'
-  #       - Key: Environment
-  #         Value: !Ref Environment
-  #       - Key: Purpose
-  #         Value: 'ECS'
-
-     ALBSecurityGroup:
+  ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: !Sub '${ProjectName}-${Environment}-alb-sg'
       GroupDescription: 'Security group for Application Load Balancer'
-      VpcId: !Ref VPC # Change from Fn::ImportValue to !Ref
+      VpcId: 
+        Fn::ImportValue: !Sub '${ProjectName}-${Environment}-VPCId'
       SecurityGroupIngress:
         # Allow HTTP from anywhere (internet)
         - IpProtocol: tcp
@@ -347,7 +287,8 @@ Resources:
     Properties:
       GroupName: !Sub '${ProjectName}-${Environment}-ecs-sg'
       GroupDescription: 'Security group for ECS tasks'
-      VpcId: !Ref VPC # Change from Fn::ImportValue to !Ref
+      VpcId: 
+        Fn::ImportValue: !Sub '${ProjectName}-${Environment}-VPCId'
       SecurityGroupIngress:
         # Allow traffic from ALB only on port 8080 (Java app port)
         - IpProtocol: tcp
@@ -360,6 +301,65 @@ Resources:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
           Description: 'All outbound traffic'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-ecs-sg'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: 'ECS'
+
+    # ALBSecurityGroup:
+    #   Type: AWS::EC2::SecurityGroup
+    #   Properties:
+    #     GroupName: !Sub '${ProjectName}-${Environment}-alb-sg'
+    #     GroupDescription: 'Security group for Application Load Balancer'
+    #     VpcId: !Ref VPC # Change from Fn::ImportValue to !Ref
+    #     SecurityGroupIngress:
+    #       # Allow HTTP from anywhere (internet)
+    #       - IpProtocol: tcp
+    #         FromPort: 80
+    #         ToPort: 80
+    #         CidrIp: 0.0.0.0/0
+    #         Description: 'HTTP access from internet'
+    #       # Allow HTTPS from anywhere (internet) - for future SSL setup
+    #       - IpProtocol: tcp
+    #         FromPort: 443
+    #         ToPort: 443
+    #         CidrIp: 0.0.0.0/0
+    #         Description: 'HTTPS access from internet'
+    #     SecurityGroupEgress:
+    #       # Allow all outbound traffic
+    #       - IpProtocol: -1
+    #         CidrIp: 0.0.0.0/0
+    #         Description: 'All outbound traffic'
+    #     Tags:
+    #       - Key: Name
+    #         Value: !Sub '${ProjectName}-${Environment}-alb-sg'
+    #       - Key: Environment
+    #         Value: !Ref Environment
+    #       - Key: Purpose
+    #         Value: 'LoadBalancer'
+
+    # # Security Group for ECS Tasks
+    # ECSSecurityGroup:
+    #   Type: AWS::EC2::SecurityGroup
+    #   Properties:
+    #     GroupName: !Sub '${ProjectName}-${Environment}-ecs-sg'
+    #     GroupDescription: 'Security group for ECS tasks'
+    #     VpcId: !Ref VPC # Change from Fn::ImportValue to !Ref
+    #     SecurityGroupIngress:
+    #       # Allow traffic from ALB only on port 8080 (Java app port)
+    #       - IpProtocol: tcp
+    #         FromPort: 8080
+    #         ToPort: 8080
+    #         SourceSecurityGroupId: !Ref ALBSecurityGroup
+    #         Description: 'HTTP access from ALB'
+    #     SecurityGroupEgress:
+    #       # Allow all outbound traffic (needed for ECR pulls, internet access via NAT)
+    #       - IpProtocol: -1
+    #         CidrIp: 0.0.0.0/0
+    #         Description: 'All outbound traffic'
 
 
   # Security Group for VPC Endpoints (optional but good practice)
@@ -813,7 +813,7 @@ Resources:
 
   # GitHub OIDC Identity Provider (for secure GitHub Actions authentication)
   GitHubOIDCProvider:
-    Type: AWS::IAM::OIDCIdentityProvider
+    Type: AWS::IAM::OIDCProvider
     Properties:
       Url: https://token.actions.githubusercontent.com
       ClientIdList:
@@ -821,6 +821,11 @@ Resources:
       ThumbprintList:
         - 6938fd4d98bab03faadb97b34396831e3780aea1
         - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-github-oidc-provider'
+        - Key: Environment
+          Value: !Ref Environment
 
   # GitHub Actions Role (for OIDC authentication)
   GitHubActionsRole:
