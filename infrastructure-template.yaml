@@ -699,3 +699,27 @@ Outputs:
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
     Export:
       Name: !Sub '${ProjectName}-${Environment}-Application-URL'
+
+  ECRRepositoryURI:
+    Description: 'ECR Repository URI'
+    Value: !GetAtt ECRRepository.RepositoryUri
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-ECR-URI'
+
+  ECRRepositoryName:
+    Description: 'ECR Repository Name'
+    Value: !Ref ECRRepository
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-ECR-Name'
+
+  ECRRepositoryArn:
+    Description: 'ECR Repository ARN'
+    Value: !GetAtt ECRRepository.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-ECR-ARN'
+
+  EventBridgeRuleArn:
+    Description: 'EventBridge Rule ARN'
+    Value: !GetAtt ECREventRule.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-EventRule-ARN'
