@@ -554,13 +554,25 @@ Resources:
             - 'PUSH'
           repository-name:
             - !Ref ECRRepository
-          image-tag:
-            - 'latest'  # Only trigger for 'latest' tag
       State: ENABLED
       Targets:
-        - Arn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:pipeline/${ProjectName}-${Environment}-pipeline'
+        - Arn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-pipeline'
           Id: 'ECRPushTarget'
           RoleArn: !GetAtt EventBridgeRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              imageDigest: "$.detail.image-digest"
+            InputTemplate: |
+              {
+                "sourceRevisions": [
+                  {
+                    "actionName": "Source",
+                    "revisionType": "IMAGE_DIGEST",
+                    "revisionValue": <imageDigest>
+                  }
+                ]
+              }
+
 
   # IAM Role for EventBridge to trigger CodePipeline
   EventBridgeRole:
