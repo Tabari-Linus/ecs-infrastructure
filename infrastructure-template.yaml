@@ -672,6 +672,7 @@ Resources:
           Value: !Ref Environment
 
   # CodeDeploy Service Role
+  # CodeDeploy Service Role
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -684,7 +685,7 @@ Resources:
               Service: codedeploy.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForECSLimitedAccess
+        - arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS
       Policies:
         - PolicyName: CodeDeployECSPolicy
           PolicyDocument:
