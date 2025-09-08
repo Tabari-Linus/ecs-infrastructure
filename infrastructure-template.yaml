@@ -34,6 +34,12 @@ Parameters:
     AllowedValues: ['dev', 'staging', 'prod']
     Description: 'Environment name'
 
+  ImageTag:
+    Type: String
+    Default: 'latest'
+    Description: 'Docker image tag to deploy'
+
+
 Resources:
   # VPC
   VPC:
@@ -982,5 +988,4 @@ Outputs:
     Value: !GetAtt GitHubActionsRole.Arn
     Export:
       Name: !Sub '${ProjectName}-${Environment}-GitHubActionsRole'
-  
   
