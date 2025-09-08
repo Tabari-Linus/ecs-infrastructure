@@ -491,9 +491,10 @@ Resources:
             "rules": [
               {
                 "rulePriority": 1,
-                "description": "Keep last 10 images",
+                "description": "Keep last 10 tagged images",
                 "selection": {
                   "tagStatus": "tagged",
+                  "tagPrefixList": ["v", "latest"],
                   "countType": "imageCountMoreThan",
                   "countNumber": 10
                 },
@@ -503,6 +504,18 @@ Resources:
               },
               {
                 "rulePriority": 2,
+                "description": "Keep last 5 images for any tag pattern",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 3,
                 "description": "Delete untagged images older than 1 day",
                 "selection": {
                   "tagStatus": "untagged",
@@ -574,6 +587,7 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-eventbridge-role'
         - Key: Environment
           Value: !Ref Environment
+
 
 
 # Outputs - these will be used by other CloudFormation stacks
