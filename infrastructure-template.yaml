@@ -475,6 +475,105 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref ECSTargetGroupGreen
+  
+
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${ProjectName}-${Environment}-java-app'
+      ImageTagMutability: MUTABLE  # Allows overwriting tags (good for dev)
+      ImageScanningConfiguration:
+        ScanOnPush: true  # Automatically scan for vulnerabilities
+      LifecyclePolicy:
+        # Automatically clean up old images to save costs
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Delete untagged images older than 1 day",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 1
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-ecr'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: 'ContainerRegistry'
+
+  # EventBridge Rule to trigger CodePipeline when new image is pushed
+  ECREventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-ecr-push-rule'
+      Description: 'Trigger deployment when new image is pushed to ECR'
+      EventPattern:
+        source:
+          - 'aws.ecr'
+        detail-type:
+          - 'ECR Image Action'
+        detail:
+          action-type:
+            - 'PUSH'
+          repository-name:
+            - !Ref ECRRepository
+          image-tag:
+            - 'latest'  # Only trigger for 'latest' tag
+      State: ENABLED
+      Targets:
+        - Arn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:pipeline/${ProjectName}-${Environment}-pipeline'
+          Id: 'ECRPushTarget'
+          RoleArn: !GetAtt EventBridgeRole.Arn
+
+  # IAM Role for EventBridge to trigger CodePipeline
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-eventbridge-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: TriggerCodePipeline
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codepipeline:StartPipelineExecution
+                Resource: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:pipeline/${ProjectName}-${Environment}-pipeline'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-eventbridge-role'
+        - Key: Environment
+          Value: !Ref Environment
 
 
 # Outputs - these will be used by other CloudFormation stacks
