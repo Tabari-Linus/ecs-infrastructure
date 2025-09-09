@@ -41,7 +41,7 @@ Parameters:
     Description: 'The amount of memory (in MiB) reserved for the container.'
   GitHubUserRepo:
     Type: String
-    Default: 'Tabari-Linus/ecs-cicd-lab-app'
+    Default: 'Tabari-Linus/ecs_to_do_app'
     Description: 'GitHub user and repository name (e.g., User/Repo)'
   GitHubBranch:
     Type: String
