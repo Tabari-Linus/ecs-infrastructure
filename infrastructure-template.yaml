@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateVersion: '2010-09-09'
 Description: 'Corrected and Enhanced VPC, ECS, and CI/CD Infrastructure for ECS CI/CD Lab.'
 
 Parameters:
@@ -41,7 +41,7 @@ Parameters:
     Description: 'The amount of memory (in MiB) reserved for the container.'
   GitHubUserRepo:
     Type: String
-    Default: 'Tabari-Linus/ecs_to_do_app'
+    Default: 'Tabari-Linus/ecs-cicd-lab-app'
     Description: 'GitHub user and repository name (e.g., User/Repo)'
   GitHubBranch:
     Type: String
@@ -49,7 +49,7 @@ Parameters:
     Description: 'GitHub branch to track'
 
 Resources:
-  # VPC and Networking (unchanged, as it was correctly configured for high availability)
+  # VPC and Networking (unchanged)
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -413,6 +413,35 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  # Re-added the missing ECSTaskRole
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-ecs-task-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        # Add any application-specific permissions here
+        - PolicyName: ApplicationPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-ecs-task-role'
+        - Key: Environment
+          Value: !Ref Environment
+
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -476,7 +505,7 @@ Resources:
                 Resource:
                   - !GetAtt CodeDeployServiceRole.Arn
                   - !GetAtt ECSTaskExecutionRole.Arn
-                  - !GetAtt ECSTaskRole.Arn
+                  - !GetAtt ECSTaskRole.Arn # Added reference to the ECSTaskRole
               - Effect: Allow
                 Action:
                   - ecs:DescribeServices
@@ -513,7 +542,7 @@ Resources:
       Cluster: !Ref ECSCluster
       LaunchType: FARGATE
       TaskDefinition: !Ref ECSTaskDefinition
-      DesiredCount: 1 # Set an initial desired count
+      DesiredCount: 1
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 100
@@ -547,9 +576,10 @@ Resources:
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn # The ARN for the re-added role
       ContainerDefinitions:
         - Name: !Sub '${ProjectName}-${Environment}-app'
-          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Environment}-java-app:latest' # Use a default image for the initial deployment
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Environment}-java-app:latest'
           PortMappings:
             - ContainerPort: 8080
               Protocol: tcp
@@ -607,7 +637,6 @@ Resources:
       EcsServices:
         - ClusterName: !Ref ECSCluster
           ServiceName: !Ref ECSService
-      # Correctly place LoadBalancerInfo here
       LoadBalancerInfo:
         TargetGroupPairInfoList:
           - TargetGroups:
@@ -616,12 +645,6 @@ Resources:
             ProdTrafficRoute:
               ListenerArns:
                 - !Ref HTTPListener
-            # The test listener rule is crucial for blue/green. We don't have a separate listener here,
-            # so we'll route it via a listener rule. The rule itself is not in this template.
-            # For this simple setup, you would typically use a test listener or a rule on the main listener.
-            # The original template had this pointing to the HTTPListener which is an oversimplification.
-            # However, for a basic example that just gets it working, you can leave it as is or omit it.
-            # This template omits it for simplicity as the listener rule would be created separately.
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-codedeploy-deployment-group'
@@ -650,12 +673,9 @@ Resources:
                 Owner: !Select [0, !Split ['/', !Ref GitHubUserRepo]]
                 Repo: !Select [1, !Split ['/', !Ref GitHubUserRepo]]
                 Branch: !Ref GitHubBranch
-                PollForSourceChanges: false # Required for webhooks
-                # ConnectionArn: !Ref GitHubConnection # You'd use a connection resource in a real scenario
+                PollForSourceChanges: false
               OutputArtifacts:
                 - Name: SourceOutput
-              # Note: In a real scenario, you'd use a CodeStar connection for a more secure integration.
-              # This example omits it for simplicity and focuses on the pipeline structure.
         - Name: Build
           Actions:
             - Name: BuildAndPush
@@ -668,6 +688,8 @@ Resources:
                 ProjectName: !Ref CodeBuildProject
               InputArtifacts:
                 - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
         - Name: Deploy
           Actions:
             - Name: Deploy
@@ -682,7 +704,7 @@ Resources:
               InputArtifacts:
                 - Name: BuildOutput
 
-  # CodeBuild Project (to be defined in a separate file, as per best practices)
+  # CodeBuild Project
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
