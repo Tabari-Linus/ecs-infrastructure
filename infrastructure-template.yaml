@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'VPC and Networking Infrastructure for ECS CI/CD Lab'
+Description: 'VPC and Networking Infrastructure for ECS CI/CD Lab with Corrected Blue/Green Deployment'
 
 Parameters:
   ProjectName:
@@ -374,36 +374,6 @@ Resources:
         - Key: Purpose
           Value: 'LoadBalancer'
 
-  # Target Group for ECS Service
-  ECSTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: !Sub '${ProjectName}-${Environment}-ecs-tg'
-      Port: 8080  # Port where your Java app runs
-      Protocol: HTTP
-      TargetType: ip  # For Fargate, we use IP targets
-      VpcId: !Ref VPC
-      # Health check configuration
-      HealthCheckEnabled: true
-      HealthCheckIntervalSeconds: 30
-      HealthCheckPath: /  # Your app's health check endpoint
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 3
-      HealthCheckPort: 8080
-      # Target group attributes
-      TargetGroupAttributes:
-        - Key: deregistration_delay.timeout_seconds
-          Value: '30'  # Faster draining for development
-        - Key: stickiness.enabled
-          Value: 'false'
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-ecs-tg'
-        - Key: Environment
-          Value: !Ref Environment
-
   # Blue Target Group for Blue/Green Deployments
   ECSTargetGroupBlue:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -464,7 +434,7 @@ Resources:
         - Key: Purpose
           Value: 'BlueGreen'
 
-  # HTTP Listener (redirects to HTTPS in production)
+  # HTTP Listener (for Blue/Green deployments)
   HTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -473,29 +443,16 @@ Resources:
       Protocol: HTTP
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref ECSTargetGroup
-
-  # Test Listener for Blue/Green deployments (port 8080)
-  TestListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref ApplicationLoadBalancer
-      Port: 8080
-      Protocol: HTTP
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref ECSTargetGroupGreen
+          TargetGroupArn: !Ref ECSTargetGroupBlue
   
-
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub '${ProjectName}-${Environment}-java-app'
-      ImageTagMutability: MUTABLE  # Allows overwriting tags (good for dev)
+      ImageTagMutability: MUTABLE
       ImageScanningConfiguration:
-        ScanOnPush: true  # Automatically scan for vulnerabilities
+        ScanOnPush: true
       LifecyclePolicy:
-        # Automatically clean up old images to save costs
         LifecyclePolicyText: |
           {
             "rules": [
@@ -539,7 +496,6 @@ Resources:
               }
             ]
           }
-
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-ecr'
@@ -680,7 +636,6 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # CodeDeploy Service Role
   # CodeDeploy Service Role
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
@@ -881,6 +836,53 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
 
+  # CodeDeploy Application
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub '${ProjectName}-${Environment}-app-codedeploy'
+      ComputePlatform: ECS
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-app-codedeploy'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CodeDeploy Deployment Group
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: !Sub '${ProjectName}-${Environment}-deployment-group'
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce # Or a custom one like CodeDeployDefault.ECSCanary10Percent5Minutes
+      DeploymentStyle:
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+        DeploymentType: BLUE_GREEN
+      AutoRollbackConfiguration:
+        Enabled: true
+        Events:
+          - DEPLOYMENT_FAILURE
+      BlueGreenDeploymentConfiguration:
+        DeploymentReadyOption:
+          ActionOnTimeout: CONTINUE_DEPLOYMENT
+          WaitTimeInMinutes: 0
+        TerminateBlueInstancesOnDeploymentSuccess:
+          Action: TERMINATE
+          TerminationWaitTimeInMinutes: 5
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - TargetGroups:
+              - TargetGroupArn: !Ref ECSTargetGroupBlue
+              - TargetGroupArn: !Ref ECSTargetGroupGreen
+            ProdTrafficRoute:
+              ListenerArns:
+                - !Ref HTTPListener
+      EcsServices:
+        - ClusterName: !Ref ECSCluster
+          ServiceName: !Ref ECSService
+
+
   # ECS Service
   ECSService:
     Type: AWS::ECS::Service
@@ -888,10 +890,11 @@ Resources:
       ServiceName: !Sub '${ProjectName}-${Environment}-service'
       Cluster: !Ref ECSCluster
       LaunchType: FARGATE
-      DesiredCount: 1
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: CODE_DEPLOY
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -901,10 +904,6 @@ Resources:
           SecurityGroups:
             - !Ref ECSSecurityGroup
       TaskDefinition: !Ref ECSTaskDefinition
-      LoadBalancers:
-        - ContainerName: !Sub '${ProjectName}-${Environment}-app'
-          ContainerPort: 8080
-          TargetGroupArn: !Ref ECSTargetGroup
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-service'
@@ -922,7 +921,6 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-log-group'
         - Key: Environment
           Value: !Ref Environment
-
 
 Outputs:
   VPCId:
@@ -942,34 +940,3 @@ Outputs:
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
     Export:
       Name: !Sub '${ProjectName}-${Environment}-Application-URL'
-
-  
-  ECSTaskExecutionRoleArn:
-    Description: 'ECS Task Execution Role ARN'
-    Value: !GetAtt ECSTaskExecutionRole.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECSTaskExecutionRole'
-
-  ECSTaskRoleArn:
-    Description: 'ECS Task Role ARN'
-    Value: !GetAtt ECSTaskRole.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECSTaskRole'
-
-  CodeDeployServiceRoleArn:
-    Description: 'CodeDeploy Service Role ARN'
-    Value: !GetAtt CodeDeployServiceRole.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-CodeDeployServiceRole'
-
-  CodePipelineServiceRoleArn:
-    Description: 'CodePipeline Service Role ARN'
-    Value: !GetAtt CodePipelineServiceRole.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-CodePipelineServiceRole'
-
-  GitHubActionsRoleArn:
-    Description: 'GitHub Actions Role ARN'
-    Value: !GetAtt GitHubActionsRole.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-GitHubActionsRole'
