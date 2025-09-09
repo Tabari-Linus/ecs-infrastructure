@@ -6,44 +6,39 @@ Parameters:
     Type: String
     Default: 'ecs-cicd-lab'
     Description: 'Name prefix for all resources'
-  
   VpcCidr:
     Type: String
     Default: '10.0.0.0/16'
     Description: 'CIDR block for VPC'
-
   PublicSubnet1Cidr:
     Type: String
-    Default: 10.0.1.0/24
-
+    Default: '10.0.1.0/24'
+    Description: 'CIDR block for Public Subnet 1'
   PublicSubnet2Cidr:
     Type: String
-    Default: 10.0.2.0/24
-
+    Default: '10.0.2.0/24'
+    Description: 'CIDR block for Public Subnet 2'
   PrivateSubnet1Cidr:
     Type: String
-    Default: 10.0.3.0/24
-
+    Default: '10.0.3.0/24'
+    Description: 'CIDR block for Private Subnet 1'
   PrivateSubnet2Cidr:
     Type: String
-    Default: 10.0.4.0/24
-  
+    Default: '10.0.4.0/24'
+    Description: 'CIDR block for Private Subnet 2'
   Environment:
     Type: String
     Default: 'dev'
     AllowedValues: ['dev', 'staging', 'prod']
     Description: 'Environment name'
-
   ImageTag:
     Type: String
     Default: 'latest'
     Description: 'Docker image tag to deploy'
-
   Cpu:
     Type: String
     Default: '256'
     Description: 'The number of CPU units reserved for the container.'
-  
   Memory:
     Type: String
     Default: '512'
@@ -74,7 +69,6 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-igw'
         - Key: Environment
           Value: !Ref Environment
-
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
@@ -96,7 +90,6 @@ Resources:
           Value: 'Public'
         - Key: Environment
           Value: !Ref Environment
-
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -126,7 +119,6 @@ Resources:
           Value: 'Private'
         - Key: Environment
           Value: !Ref Environment
-
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -150,7 +142,6 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-nat-eip-1'
-
   NATGateway2EIP:
     Type: AWS::EC2::EIP
     DependsOn: AttachGateway
@@ -159,7 +150,6 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-nat-eip-2'
-
   NATGateway1:
     Type: AWS::EC2::NatGateway
     Properties:
@@ -168,7 +158,6 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-nat-1'
-
   NATGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
@@ -188,7 +177,6 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-public-rt'
         - Key: Environment
           Value: !Ref Environment
-
   DefaultPublicRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
@@ -196,13 +184,11 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
-
   PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet1
-
   PublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -219,20 +205,17 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-private-rt-1'
         - Key: Environment
           Value: !Ref Environment
-
   DefaultPrivateRoute1:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NATGateway1
-
   PrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
       SubnetId: !Ref PrivateSubnet1
-
   PrivateRouteTable2:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -242,20 +225,17 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-private-rt-2'
         - Key: Environment
           Value: !Ref Environment
-
   DefaultPrivateRoute2:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NATGateway2
-
   PrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
-
 
   # Security Group for Application Load Balancer
   ALBSecurityGroup:
@@ -343,7 +323,6 @@ Resources:
           Value: !Ref Environment
         - Key: Purpose
           Value: 'VPCEndpoints'
-
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -444,7 +423,8 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref ECSTargetGroupBlue
-  
+
+  # ECR Repository
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
@@ -539,7 +519,6 @@ Resources:
                 ]
               }
 
-
   # IAM Role for EventBridge to trigger CodePipeline
   EventBridgeRole:
     Type: AWS::IAM::Role
@@ -560,13 +539,14 @@ Resources:
               - Effect: Allow
                 Action:
                   - codepipeline:StartPipelineExecution
-                Resource: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:pipeline/${ProjectName}-${Environment}-pipeline'
+                Resource: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-pipeline'
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-eventbridge-role'
         - Key: Environment
           Value: !Ref Environment
 
+  # ECS Task Execution Role
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -592,7 +572,7 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
                   - ecr:GetAuthorizationToken
-                Resource: '*'
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -600,7 +580,7 @@ Resources:
                   - logs:PutLogEvents
                   - logs:DescribeLogStreams
                   - logs:DescribeLogGroups
-                Resource: '*'
+                Resource: "*"
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-ecs-task-execution-role'
@@ -629,7 +609,7 @@ Resources:
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                Resource: "*"
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-ecs-task-role'
@@ -670,14 +650,14 @@ Resources:
                   - cloudwatch:DescribeAlarms
                   - sns:Publish
                   - s3:GetObject
-                Resource: '*'
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - iam:PassRole
-                Resource: '*'
+                Resource: "*"
                 Condition:
                   StringLike:
-                    'iam:PassedToService': 
+                    'iam:PassedToService':
                       - ecs-tasks.amazonaws.com
       Tags:
         - Key: Name
@@ -709,7 +689,7 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:PutObject
                   - s3:PutObjectAcl
-                Resource: '*'
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - codedeploy:CreateDeployment
@@ -719,7 +699,7 @@ Resources:
                   - codedeploy:GetDeployment
                   - codedeploy:GetDeploymentConfig
                   - codedeploy:RegisterApplicationRevision
-                Resource: '*'
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - ecs:DescribeServices
@@ -728,11 +708,11 @@ Resources:
                   - ecs:ListTasks
                   - ecs:RegisterTaskDefinition
                   - ecs:UpdateService
-                Resource: '*'
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - iam:PassRole
-                Resource: '*'
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - elasticloadbalancing:DescribeListeners
@@ -740,7 +720,7 @@ Resources:
                   - elasticloadbalancing:DescribeTargetGroups
                   - elasticloadbalancing:ModifyListener
                   - elasticloadbalancing:ModifyRule
-                Resource: '*'
+                Resource: "*"
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-codepipeline-service-role'
@@ -791,13 +771,13 @@ Resources:
                   - ecr:InitiateLayerUpload
                   - ecr:UploadLayerPart
                   - ecr:CompleteLayerUpload
-                Resource: '*'
+                Resource: "*"
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-github-actions-role'
         - Key: Environment
           Value: !Ref Environment
-  
+
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
@@ -870,18 +850,30 @@ Resources:
         TerminateBlueInstancesOnDeploymentSuccess:
           Action: TERMINATE
           TerminationWaitTimeInMinutes: 5
-      LoadBalancerInfo:
-        TargetGroupPairInfoList:
-          - TargetGroups:
-              - TargetGroupArn: !Ref ECSTargetGroupBlue
-              - TargetGroupArn: !Ref ECSTargetGroupGreen
-            ProdTrafficRoute:
-              ListenerArns:
-                - !Ref HTTPListener
-      EcsServices:
-        - ClusterName: !Ref ECSCluster
-          ServiceName: !Ref ECSService
-
+        # The EcsServices property is correctly nested here
+        EcsServices:
+          - ClusterName: !Ref ECSCluster
+            ServiceName: !Ref ECSService
+        LoadBalancerInfo:
+          TargetGroupPairInfoList:
+            - TargetGroups:
+                - TargetGroupArn: !Ref ECSTargetGroupBlue
+                - TargetGroupArn: !Ref ECSTargetGroupGreen
+              ProdTrafficRoute:
+                ListenerArns:
+                  - !Ref HTTPListener
+              # The TestTrafficRoute section is needed for blue/green deployment.
+              # Note: HTTPListenerTest resource is not defined in this template.
+              TestTrafficRoute:
+                ListenerArns:
+                  - !Ref HTTPListener # Assuming test and prod traffic use the same listener here for simplicity.
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-codedeploy-deployment-group'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
 
   # ECS Service
   ECSService:
@@ -921,20 +913,17 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-log-group'
         - Key: Environment
           Value: !Ref Environment
-
 Outputs:
   VPCId:
     Description: 'VPC ID'
     Value: !Ref VPC
     Export:
       Name: !Sub '${ProjectName}-${Environment}-VPCId'
-
   ApplicationLoadBalancerDNS:
     Description: 'DNS name of the Application Load Balancer'
     Value: !GetAtt ApplicationLoadBalancer.DNSName
     Export:
       Name: !Sub '${ProjectName}-${Environment}-ALB-DNS'
-
   ApplicationURL:
     Description: 'URL to access the application'
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
