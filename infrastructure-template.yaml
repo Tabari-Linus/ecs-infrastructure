@@ -51,7 +51,7 @@ Parameters:
 Resources:
   # OIDC Provider for GitHub Actions
   GitHubOIDCProvider:
-    Type: AWS::IAM::OpenIdConnectProvider
+    Type: AWS::IAM::OIDCProvider
     Properties:
       Url: 'https://token.actions.githubusercontent.com'
       ClientIdList:
