@@ -376,7 +376,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # ECR Repository (MISSING RESOURCE, NOW ADDED)
+  # ECR Repository
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
@@ -415,7 +415,7 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
                   - ecr:GetAuthorizationToken
-                Resource: !GetAtt ECRRepository.Arn # Corrected to reference ECRRepository
+                Resource: !GetAtt ECRRepository.Arn
               - Effect: Allow
                 Action:
                   - logs:CreateLogStream
@@ -511,7 +511,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ecr:DescribeImages
-                Resource: !GetAtt ECRRepository.Arn # Corrected to reference ECRRepository
+                Resource: !GetAtt ECRRepository.Arn
               - Effect: Allow
                 Action:
                   - iam:PassRole
@@ -770,7 +770,7 @@ Resources:
                   - ecr:InitiateLayerUpload
                   - ecr:PutImage
                   - ecr:UploadLayerPart
-                Resource: !GetAtt ECRRepository.Arn # Corrected to reference ECRRepository
+                Resource: !GetAtt ECRRepository.Arn
               - Effect: Allow
                 Action:
                   - s3:PutObject
@@ -799,7 +799,7 @@ Resources:
           action-type:
             - 'PUSH'
           repository-name:
-            - !GetAtt ECRRepository.Name # Corrected to reference ECRRepository name
+            - !Ref ECRRepository
       State: ENABLED
       Targets:
         - Arn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-pipeline'
