@@ -887,6 +887,10 @@ Resources:
         MinimumHealthyPercent: 100
       DeploymentController:
         Type: CODE_DEPLOY
+      LoadBalancers:
+        - ContainerName: !Sub '${ProjectName}-${Environment}-app'
+          ContainerPort: 8080
+          TargetGroupArn: !Ref ECSTargetGroupBlue
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
