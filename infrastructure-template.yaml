@@ -376,6 +376,20 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  # ECR Repository (MISSING RESOURCE, NOW ADDED)
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${ProjectName}-${Environment}-java-app'
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-java-app-repo'
+        - Key: Environment
+          Value: !Ref Environment
+
   # IAM Roles
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
@@ -401,7 +415,7 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
                   - ecr:GetAuthorizationToken
-                Resource: !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}-${Environment}-java-app'
+                Resource: !GetAtt ECRRepository.Arn # Corrected to reference ECRRepository
               - Effect: Allow
                 Action:
                   - logs:CreateLogStream
@@ -497,7 +511,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ecr:DescribeImages
-                Resource: !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}-${Environment}-java-app'
+                Resource: !GetAtt ECRRepository.Arn # Corrected to reference ECRRepository
               - Effect: Allow
                 Action:
                   - iam:PassRole
@@ -636,7 +650,6 @@ Resources:
       EcsServices:
         - ClusterName: !Ref ECSCluster
           ServiceName: !Ref ECSService
-      # This is the corrected placement for LoadBalancerInfo
       LoadBalancerInfo:
         TargetGroupPairInfoList:
           - TargetGroups:
@@ -757,7 +770,7 @@ Resources:
                   - ecr:InitiateLayerUpload
                   - ecr:PutImage
                   - ecr:UploadLayerPart
-                Resource: '*'
+                Resource: !GetAtt ECRRepository.Arn # Corrected to reference ECRRepository
               - Effect: Allow
                 Action:
                   - s3:PutObject
@@ -786,7 +799,7 @@ Resources:
           action-type:
             - 'PUSH'
           repository-name:
-            - !Ref ECRRepository
+            - !GetAtt ECRRepository.Name # Corrected to reference ECRRepository name
       State: ENABLED
       Targets:
         - Arn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-pipeline'
