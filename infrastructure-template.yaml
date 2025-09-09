@@ -49,6 +49,16 @@ Parameters:
     Description: 'GitHub branch to track'
 
 Resources:
+  # OIDC Provider for GitHub Actions
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OpenIdConnectProvider
+    Properties:
+      Url: 'https://token.actions.githubusercontent.com'
+      ClientIdList:
+        - 'sts.amazonaws.com'
+      ThumbprintList:
+        - '6942917711d95155985012e84736f116503c75d4'
+
   # VPC and Networking
   VPC:
     Type: AWS::EC2::VPC
@@ -312,7 +322,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
-      HealthCheckPath: /actuator/health # Corrected HealthCheckPath
+      HealthCheckPath: /actuator/health
       HealthCheckPort: 8080
       HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 30
@@ -333,7 +343,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
-      HealthCheckPath: /actuator/health # Corrected HealthCheckPath
+      HealthCheckPath: /actuator/health
       HealthCheckPort: 8080
       HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 30
@@ -750,6 +760,16 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: sts:AssumeRole
+          # New OIDC trust policy statement
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com'
+              StringLike:
+                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubUserRepo}:*'
       Policies:
         - PolicyName: CodeBuildPolicy
           PolicyDocument:
