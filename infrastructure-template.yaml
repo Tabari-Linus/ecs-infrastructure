@@ -312,7 +312,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
-      HealthCheckPath: /
+      HealthCheckPath: /actuator/health # Corrected HealthCheckPath
       HealthCheckPort: 8080
       HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 30
@@ -333,7 +333,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
-      HealthCheckPath: /
+      HealthCheckPath: /actuator/health # Corrected HealthCheckPath
       HealthCheckPort: 8080
       HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 30
