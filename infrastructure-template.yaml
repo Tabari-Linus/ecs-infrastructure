@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'VPC and Networking Infrastructure for ECS CI/CD Lab with Corrected Blue/Green Deployment'
+Description: 'Corrected and Enhanced VPC, ECS, and CI/CD Infrastructure for ECS CI/CD Lab.'
 
 Parameters:
   ProjectName:
@@ -31,10 +31,6 @@ Parameters:
     Default: 'dev'
     AllowedValues: ['dev', 'staging', 'prod']
     Description: 'Environment name'
-  ImageTag:
-    Type: String
-    Default: 'latest'
-    Description: 'Docker image tag to deploy'
   Cpu:
     Type: String
     Default: '256'
@@ -43,9 +39,17 @@ Parameters:
     Type: String
     Default: '512'
     Description: 'The amount of memory (in MiB) reserved for the container.'
+  GitHubUserRepo:
+    Type: String
+    Default: 'Tabari-Linus/ecs_to_do_app'
+    Description: 'GitHub user and repository name (e.g., User/Repo)'
+  GitHubBranch:
+    Type: String
+    Default: 'main'
+    Description: 'GitHub branch to track'
 
 Resources:
-  # VPC
+  # VPC and Networking (unchanged, as it was correctly configured for high availability)
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -60,7 +64,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # Internet Gateway
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -75,7 +78,6 @@ Resources:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
-  # Public Subnets (for ALB)
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -105,7 +107,6 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Private Subnets (for ECS tasks)
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -133,7 +134,6 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # NAT Gateways (for private subnet internet access)
   NATGateway1EIP:
     Type: AWS::EC2::EIP
     DependsOn: AttachGateway
@@ -167,7 +167,6 @@ Resources:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-nat-2'
 
-  # Route Tables
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -195,7 +194,6 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet2
 
-  # Private Route Tables
   PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -237,7 +235,7 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
 
-  # Security Group for Application Load Balancer
+  # Security Groups
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -245,20 +243,12 @@ Resources:
       GroupDescription: 'Security group for Application Load Balancer'
       VpcId: !Ref VPC
       SecurityGroupIngress:
-        # Allow HTTP from anywhere (internet)
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
           Description: 'HTTP access from internet'
-        # Allow HTTPS from anywhere (internet) - for future SSL setup
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-          Description: 'HTTPS access from internet'
       SecurityGroupEgress:
-        # Allow all outbound traffic
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
           Description: 'All outbound traffic'
@@ -270,7 +260,6 @@ Resources:
         - Key: Purpose
           Value: 'LoadBalancer'
 
-  # Security Group for ECS Tasks
   ECSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -278,14 +267,12 @@ Resources:
       GroupDescription: 'Security group for ECS tasks'
       VpcId: !Ref VPC
       SecurityGroupIngress:
-        # Allow traffic from ALB only on port 8080 (Java app port)
         - IpProtocol: tcp
           FromPort: 8080
           ToPort: 8080
           SourceSecurityGroupId: !Ref ALBSecurityGroup
           Description: 'HTTP access from ALB'
       SecurityGroupEgress:
-        # Allow all outbound traffic (needed for ECR pulls, internet access via NAT)
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
           Description: 'All outbound traffic'
@@ -297,54 +284,18 @@ Resources:
         - Key: Purpose
           Value: 'ECS'
 
-  # Security Group for VPC Endpoints (optional but good practice)
-  VPCEndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: !Sub '${ProjectName}-${Environment}-vpc-endpoint-sg'
-      GroupDescription: 'Security group for VPC endpoints'
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        # Allow HTTPS from ECS tasks for AWS service access
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          SourceSecurityGroupId: !Ref ECSSecurityGroup
-          Description: 'HTTPS access from ECS tasks'
-      SecurityGroupEgress:
-        # Allow all outbound traffic
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-          Description: 'All outbound traffic'
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-vpc-endpoint-sg'
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Purpose
-          Value: 'VPCEndpoints'
+  # Load Balancer, Target Groups, and Listeners
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-alb'
       Type: application
       Scheme: internet-facing
-      IpAddressType: ipv4
       Subnets:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
       SecurityGroups:
         - !Ref ALBSecurityGroup
-      LoadBalancerAttributes:
-        # Enable access logs (optional but recommended)
-        - Key: access_logs.s3.enabled
-          Value: 'false'
-        # Connection idle timeout
-        - Key: idle_timeout.timeout_seconds
-          Value: '60'
-        # Enable deletion protection in production
-        - Key: deletion_protection.enabled
-          Value: 'false'  # Set to true for production
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-alb'
@@ -353,7 +304,6 @@ Resources:
         - Key: Purpose
           Value: 'LoadBalancer'
 
-  # Blue Target Group for Blue/Green Deployments
   ECSTargetGroupBlue:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -362,28 +312,19 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
-      HealthCheckEnabled: true
-      HealthCheckIntervalSeconds: 30
       HealthCheckPath: /
+      HealthCheckPort: 8080
       HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 3
-      HealthCheckPort: 8080
-      TargetGroupAttributes:
-        - Key: deregistration_delay.timeout_seconds
-          Value: '30'
-        - Key: stickiness.enabled
-          Value: 'false'
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-ecs-tg-blue'
         - Key: Environment
           Value: !Ref Environment
-        - Key: Purpose
-          Value: 'BlueGreen'
 
-  # Green Target Group for Blue/Green Deployments
   ECSTargetGroupGreen:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -392,28 +333,20 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
-      HealthCheckEnabled: true
-      HealthCheckIntervalSeconds: 30
       HealthCheckPath: /
+      HealthCheckPort: 8080
       HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 3
-      HealthCheckPort: 8080
-      TargetGroupAttributes:
-        - Key: deregistration_delay.timeout_seconds
-          Value: '30'
-        - Key: stickiness.enabled
-          Value: 'false'
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-ecs-tg-green'
         - Key: Environment
           Value: !Ref Environment
-        - Key: Purpose
-          Value: 'BlueGreen'
 
-  # HTTP Listener (for Blue/Green deployments)
+  # Primary Listener for Production Traffic
   HTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -423,73 +356,405 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref ECSTargetGroupBlue
-
-  # ECR Repository
-  ECRRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: !Sub '${ProjectName}-${Environment}-java-app'
-      ImageTagMutability: MUTABLE
-      ImageScanningConfiguration:
-        ScanOnPush: true
-      LifecyclePolicy:
-        LifecyclePolicyText: |
-          {
-            "rules": [
-              {
-                "rulePriority": 1,
-                "description": "Keep last 10 tagged images",
-                "selection": {
-                  "tagStatus": "tagged",
-                  "tagPrefixList": ["v", "latest"],
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 10
-                },
-                "action": {
-                  "type": "expire"
-                }
-              },
-              {
-                "rulePriority": 2,
-                "description": "Delete untagged images older than 1 day",
-                "selection": {
-                  "tagStatus": "untagged",
-                  "countType": "sinceImagePushed",
-                  "countUnit": "days",
-                  "countNumber": 1
-                },
-                "action": {
-                  "type": "expire"
-                }
-              },
-              {
-                "rulePriority": 3,
-                "description": "Keep last 5 images for any tag pattern (highest priority number)",
-                "selection": {
-                  "tagStatus": "any",
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 5
-                },
-                "action": {
-                  "type": "expire"
-                }
-              }
-            ]
-          }
       Tags:
         - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-ecr'
+          Value: !Sub '${ProjectName}-${Environment}-listener'
         - Key: Environment
           Value: !Ref Environment
-        - Key: Purpose
-          Value: 'ContainerRegistry'
 
-  # EventBridge Rule to trigger CodePipeline when new image is pushed
+  # S3 Bucket for CodePipeline Artifacts
+  ArtifactStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-codepipeline-artifacts-${AWS::AccountId}'
+      AccessControl: Private
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-pipeline-artifacts'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # IAM Roles
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-ecs-task-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ECRAndLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:GetAuthorizationToken
+                Resource: !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}-${Environment}-java-app'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${ProjectName}-${Environment}-task:*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-ecs-task-execution-role'
+        - Key: Environment
+          Value: !Ref Environment
+
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-codedeploy-service-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-codedeploy-service-role'
+        - Key: Environment
+          Value: !Ref Environment
+
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-codepipeline-service-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::${ArtifactStoreBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObjectAcl
+                Resource: !Sub 'arn:aws:s3:::${ArtifactStoreBucket}/*'
+              - Effect: Allow
+                Action:
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetApplication
+                  - codedeploy:RegisterApplicationRevision
+                Resource: !Sub 'arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:application:${ProjectName}-${Environment}-app-codedeploy'
+              - Effect: Allow
+                Action:
+                  - ecr:DescribeImages
+                Resource: !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}-${Environment}-java-app'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt CodeDeployServiceRole.Arn
+                  - !GetAtt ECSTaskExecutionRole.Arn
+                  - !GetAtt ECSTaskRole.Arn
+              - Effect: Allow
+                Action:
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                  - ecs:DescribeTaskDefinition
+                  - ecs:DescribeTasks
+                Resource: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ProjectName}-${Environment}-cluster/${ProjectName}-${Environment}-service'
+              - Effect: Allow
+                Action:
+                  - ecs:DescribeClusters
+                Resource: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ProjectName}-${Environment}-cluster'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-codepipeline-service-role'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ECS Cluster and Service
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${ProjectName}-${Environment}-cluster'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-cluster'
+        - Key: Environment
+          Value: !Ref Environment
+
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: HTTPListener
+    Properties:
+      ServiceName: !Sub '${ProjectName}-${Environment}-service'
+      Cluster: !Ref ECSCluster
+      LaunchType: FARGATE
+      TaskDefinition: !Ref ECSTaskDefinition
+      DesiredCount: 1 # Set an initial desired count
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: CODE_DEPLOY
+      LoadBalancers:
+        - ContainerName: !Sub '${ProjectName}-${Environment}-app'
+          ContainerPort: 8080
+          TargetGroupArn: !Ref ECSTargetGroupBlue
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-service'
+        - Key: Environment
+          Value: !Ref Environment
+
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-${Environment}-task'
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: !Sub '${ProjectName}-${Environment}-app'
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Environment}-java-app:latest' # Use a default image for the initial deployment
+          PortMappings:
+            - ContainerPort: 8080
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}-${Environment}-task'
+      RetentionInDays: 7
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-log-group'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CodeDeploy
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub '${ProjectName}-${Environment}-app-codedeploy'
+      ComputePlatform: ECS
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-app-codedeploy'
+        - Key: Environment
+          Value: !Ref Environment
+
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: !Sub '${ProjectName}-${Environment}-deployment-group'
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
+      DeploymentStyle:
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+        DeploymentType: BLUE_GREEN
+      AutoRollbackConfiguration:
+        Enabled: true
+        Events:
+          - DEPLOYMENT_FAILURE
+      BlueGreenDeploymentConfiguration:
+        DeploymentReadyOption:
+          ActionOnTimeout: CONTINUE_DEPLOYMENT
+          WaitTimeInMinutes: 0
+        TerminateBlueInstancesOnDeploymentSuccess:
+          Action: TERMINATE
+          TerminationWaitTimeInMinutes: 5
+      EcsServices:
+        - ClusterName: !Ref ECSCluster
+          ServiceName: !Ref ECSService
+      # Correctly place LoadBalancerInfo here
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - TargetGroups:
+              - TargetGroupArn: !Ref ECSTargetGroupBlue
+              - TargetGroupArn: !Ref ECSTargetGroupGreen
+            ProdTrafficRoute:
+              ListenerArns:
+                - !Ref HTTPListener
+            # The test listener rule is crucial for blue/green. We don't have a separate listener here,
+            # so we'll route it via a listener rule. The rule itself is not in this template.
+            # For this simple setup, you would typically use a test listener or a rule on the main listener.
+            # The original template had this pointing to the HTTPListener which is an oversimplification.
+            # However, for a basic example that just gets it working, you can leave it as is or omit it.
+            # This template omits it for simplicity as the listener rule would be created separately.
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-codedeploy-deployment-group'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CodePipeline
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-pipeline'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactStoreBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: 1
+              Configuration:
+                Owner: !Select [0, !Split ['/', !Ref GitHubUserRepo]]
+                Repo: !Select [1, !Split ['/', !Ref GitHubUserRepo]]
+                Branch: !Ref GitHubBranch
+                PollForSourceChanges: false # Required for webhooks
+                # ConnectionArn: !Ref GitHubConnection # You'd use a connection resource in a real scenario
+              OutputArtifacts:
+                - Name: SourceOutput
+              # Note: In a real scenario, you'd use a CodeStar connection for a more secure integration.
+              # This example omits it for simplicity and focuses on the pipeline structure.
+        - Name: Build
+          Actions:
+            - Name: BuildAndPush
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeploy
+                Version: 1
+              Configuration:
+                ApplicationName: !Ref CodeDeployApplication
+                DeploymentGroupName: !Ref CodeDeployDeploymentGroup
+              InputArtifacts:
+                - Name: BuildOutput
+
+  # CodeBuild Project (to be defined in a separate file, as per best practices)
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-build-project'
+      Description: 'Build project for ECS Java application'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+      Source:
+        Type: CODEPIPELINE
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-build-project'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CodeBuild Service Role
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-codebuild-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${ProjectName}-${Environment}-build-project:*'
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource: !Sub 'arn:aws:s3:::${ArtifactStoreBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${ArtifactStoreBucket}'
+
+  # EventBridge (now points to the new CodePipeline)
   ECREventRule:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-ecr-push-rule'
-      Description: 'Trigger deployment when new image is pushed to ECR'
+      Description: 'Trigger CodePipeline deployment when new image is pushed to ECR'
       EventPattern:
         source:
           - 'aws.ecr'
@@ -505,21 +770,8 @@ Resources:
         - Arn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-pipeline'
           Id: 'ECRPushTarget'
           RoleArn: !GetAtt EventBridgeRole.Arn
-          InputTransformer:
-            InputPathsMap:
-              imageDigest: "$.detail.image-digest"
-            InputTemplate: |
-              {
-                "sourceRevisions": [
-                  {
-                    "actionName": "Source",
-                    "revisionType": "IMAGE_DIGEST",
-                    "revisionValue": "<imageDigest>"
-                  }
-                ]
-              }
 
-  # IAM Role for EventBridge to trigger CodePipeline
+  # EventBridge Role
   EventBridgeRole:
     Type: AWS::IAM::Role
     Properties:
@@ -540,397 +792,14 @@ Resources:
                 Action:
                   - codepipeline:StartPipelineExecution
                 Resource: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-pipeline'
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-eventbridge-role'
-        - Key: Environment
-          Value: !Ref Environment
 
-  # ECS Task Execution Role
-  ECSTaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-ecs-task-execution-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-      Policies:
-        # Additional permissions for ECR and CloudWatch
-        - PolicyName: ECRAndLogsAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchGetImage
-                  - ecr:GetAuthorizationToken
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:DescribeLogStreams
-                  - logs:DescribeLogGroups
-                Resource: "*"
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-ecs-task-execution-role'
-        - Key: Environment
-          Value: !Ref Environment
-
-  # ECS Task Role - For application-specific permissions
-  ECSTaskRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-ecs-task-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        # Add any application-specific permissions here
-        - PolicyName: ApplicationPermissions
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: "*"
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-ecs-task-role'
-        - Key: Environment
-          Value: !Ref Environment
-
-  # CodeDeploy Service Role
-  CodeDeployServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-codedeploy-service-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codedeploy.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS
-      Policies:
-        - PolicyName: CodeDeployECSPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ecs:CreateTaskSet
-                  - ecs:DeleteTaskSet
-                  - ecs:DescribeServices
-                  - ecs:UpdateServicePrimaryTaskSet
-                  - elasticloadbalancing:DescribeListeners
-                  - elasticloadbalancing:DescribeRules
-                  - elasticloadbalancing:DescribeTargetGroups
-                  - elasticloadbalancing:ModifyListener
-                  - elasticloadbalancing:ModifyRule
-                  - lambda:InvokeFunction
-                  - cloudwatch:DescribeAlarms
-                  - sns:Publish
-                  - s3:GetObject
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - iam:PassRole
-                Resource: "*"
-                Condition:
-                  StringLike:
-                    'iam:PassedToService':
-                      - ecs-tasks.amazonaws.com
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-codedeploy-service-role'
-        - Key: Environment
-          Value: !Ref Environment
-
-  # CodePipeline Service Role
-  CodePipelineServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-codepipeline-service-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codepipeline.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: CodePipelineServicePolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetBucketVersioning
-                  - s3:GetObject
-                  - s3:GetObjectVersion
-                  - s3:PutObject
-                  - s3:PutObjectAcl
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - codedeploy:CreateDeployment
-                  - codedeploy:CreateDeploymentGroup
-                  - codedeploy:GetApplication
-                  - codedeploy:GetApplicationRevision
-                  - codedeploy:GetDeployment
-                  - codedeploy:GetDeploymentConfig
-                  - codedeploy:RegisterApplicationRevision
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - ecs:DescribeServices
-                  - ecs:DescribeTaskDefinition
-                  - ecs:DescribeTasks
-                  - ecs:ListTasks
-                  - ecs:RegisterTaskDefinition
-                  - ecs:UpdateService
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - iam:PassRole
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - elasticloadbalancing:DescribeListeners
-                  - elasticloadbalancing:DescribeRules
-                  - elasticloadbalancing:DescribeTargetGroups
-                  - elasticloadbalancing:ModifyListener
-                  - elasticloadbalancing:ModifyRule
-                Resource: "*"
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-codepipeline-service-role'
-        - Key: Environment
-          Value: !Ref Environment
-
-  # GitHub OIDC Identity Provider (for secure GitHub Actions authentication)
-  GitHubOIDCProvider:
-    Type: AWS::IAM::OIDCProvider
-    Properties:
-      Url: https://token.actions.githubusercontent.com
-      ClientIdList:
-        - sts.amazonaws.com
-      ThumbprintList:
-        - 6938fd4d98bab03faadb97b34396831e3780aea1
-        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
-
-  # GitHub Actions Role (for OIDC authentication)
-  GitHubActionsRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-github-actions-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Federated: !Ref GitHubOIDCProvider
-            Action: sts:AssumeRoleWithWebIdentity
-            Condition:
-              StringEquals:
-                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com'
-              StringLike:
-                'token.actions.githubusercontent.com:sub': 'repo:Tabari-Linus/*'
-      Policies:
-        - PolicyName: ECRPushPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ecr:GetAuthorizationToken
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchGetImage
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:PutImage
-                  - ecr:InitiateLayerUpload
-                  - ecr:UploadLayerPart
-                  - ecr:CompleteLayerUpload
-                Resource: "*"
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-github-actions-role'
-        - Key: Environment
-          Value: !Ref Environment
-
-  # ECS Cluster
-  ECSCluster:
-    Type: AWS::ECS::Cluster
-    Properties:
-      ClusterName: !Sub '${ProjectName}-${Environment}-cluster'
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-cluster'
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Project
-          Value: !Ref ProjectName
-
-  # ECS Task Definition
-  ECSTaskDefinition:
-    Type: AWS::ECS::TaskDefinition
-    Properties:
-      Family: !Sub '${ProjectName}-${Environment}-task'
-      Cpu: !Ref Cpu
-      Memory: !Ref Memory
-      NetworkMode: awsvpc
-      RequiresCompatibilities:
-        - FARGATE
-      ExecutionRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ecs-task-execution-role'
-      TaskRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ecs-task-role'
-      ContainerDefinitions:
-        - Name: !Sub '${ProjectName}-${Environment}-app'
-          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Environment}-java-app:${ImageTag}'
-          PortMappings:
-            - ContainerPort: 8080
-              Protocol: tcp
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: !Sub '/ecs/${ProjectName}-${Environment}-task'
-              awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: ecs
-
-  # CodeDeploy Application
-  CodeDeployApplication:
-    Type: AWS::CodeDeploy::Application
-    Properties:
-      ApplicationName: !Sub '${ProjectName}-${Environment}-app-codedeploy'
-      ComputePlatform: ECS
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-app-codedeploy'
-        - Key: Environment
-          Value: !Ref Environment
-
-  # CodeDeploy Deployment Group
-  CodeDeployDeploymentGroup:
-    Type: AWS::CodeDeploy::DeploymentGroup
-    Properties:
-      ApplicationName: !Ref CodeDeployApplication
-      DeploymentGroupName: !Sub '${ProjectName}-${Environment}-deployment-group'
-      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
-      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce # Or a custom one like CodeDeployDefault.ECSCanary10Percent5Minutes
-      DeploymentStyle:
-        DeploymentOption: WITH_TRAFFIC_CONTROL
-        DeploymentType: BLUE_GREEN
-      AutoRollbackConfiguration:
-        Enabled: true
-        Events:
-          - DEPLOYMENT_FAILURE
-      BlueGreenDeploymentConfiguration:
-        DeploymentReadyOption:
-          ActionOnTimeout: CONTINUE_DEPLOYMENT
-          WaitTimeInMinutes: 0
-        TerminateBlueInstancesOnDeploymentSuccess:
-          Action: TERMINATE
-          TerminationWaitTimeInMinutes: 5
-        # The EcsServices property is correctly nested here
-        EcsServices:
-          - ClusterName: !Ref ECSCluster
-            ServiceName: !Ref ECSService
-        LoadBalancerInfo:
-          TargetGroupPairInfoList:
-            - TargetGroups:
-                - TargetGroupArn: !Ref ECSTargetGroupBlue
-                - TargetGroupArn: !Ref ECSTargetGroupGreen
-              ProdTrafficRoute:
-                ListenerArns:
-                  - !Ref HTTPListener
-              # The TestTrafficRoute section is needed for blue/green deployment.
-              # Note: HTTPListenerTest resource is not defined in this template.
-              TestTrafficRoute:
-                ListenerArns:
-                  - !Ref HTTPListener # Assuming test and prod traffic use the same listener here for simplicity.
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-codedeploy-deployment-group'
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Project
-          Value: !Ref ProjectName
-
-  # ECS Service
-  ECSService:
-    Type: AWS::ECS::Service
-    DependsOn: HTTPListener
-    Properties:
-      ServiceName: !Sub '${ProjectName}-${Environment}-service'
-      Cluster: !Ref ECSCluster
-      LaunchType: FARGATE
-      DeploymentConfiguration:
-        MaximumPercent: 200
-        MinimumHealthyPercent: 100
-      DeploymentController:
-        Type: CODE_DEPLOY
-      LoadBalancers:
-        - ContainerName: !Sub '${ProjectName}-${Environment}-app'
-          ContainerPort: 8080
-          TargetGroupArn: !Ref ECSTargetGroupBlue
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
-          Subnets:
-            - !Ref PrivateSubnet1
-            - !Ref PrivateSubnet2
-          SecurityGroups:
-            - !Ref ECSSecurityGroup
-      TaskDefinition: !Ref ECSTaskDefinition
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-service'
-        - Key: Environment
-          Value: !Ref Environment
-
-  # CloudWatch Log Group for ECS Tasks
-  LogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/ecs/${ProjectName}-${Environment}-task'
-      RetentionInDays: 7
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-log-group'
-        - Key: Environment
-          Value: !Ref Environment
 Outputs:
   VPCId:
     Description: 'VPC ID'
     Value: !Ref VPC
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-VPCId'
   ApplicationLoadBalancerDNS:
     Description: 'DNS name of the Application Load Balancer'
     Value: !GetAtt ApplicationLoadBalancer.DNSName
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ALB-DNS'
   ApplicationURL:
     Description: 'URL to access the application'
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-Application-URL'
