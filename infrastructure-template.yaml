@@ -878,6 +878,7 @@ Resources:
   # ECS Service
   ECSService:
     Type: AWS::ECS::Service
+    DependsOn: HTTPListener
     Properties:
       ServiceName: !Sub '${ProjectName}-${Environment}-service'
       Cluster: !Ref ECSCluster
