@@ -1,4 +1,4 @@
-AWSTemplateVersion: '2010-09-09'
+AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Corrected and Enhanced VPC, ECS, and CI/CD Infrastructure for ECS CI/CD Lab.'
 
 Parameters:
@@ -49,7 +49,7 @@ Parameters:
     Description: 'GitHub branch to track'
 
 Resources:
-  # VPC and Networking (unchanged)
+  # VPC and Networking
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -413,7 +413,6 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Re-added the missing ECSTaskRole
   ECSTaskRole:
     Type: AWS::IAM::Role
     Properties:
@@ -505,7 +504,7 @@ Resources:
                 Resource:
                   - !GetAtt CodeDeployServiceRole.Arn
                   - !GetAtt ECSTaskExecutionRole.Arn
-                  - !GetAtt ECSTaskRole.Arn # Added reference to the ECSTaskRole
+                  - !GetAtt ECSTaskRole.Arn
               - Effect: Allow
                 Action:
                   - ecs:DescribeServices
@@ -576,7 +575,7 @@ Resources:
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt ECSTaskRole.Arn # The ARN for the re-added role
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
       ContainerDefinitions:
         - Name: !Sub '${ProjectName}-${Environment}-app'
           Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Environment}-java-app:latest'
@@ -637,6 +636,7 @@ Resources:
       EcsServices:
         - ClusterName: !Ref ECSCluster
           ServiceName: !Ref ECSService
+      # This is the corrected placement for LoadBalancerInfo
       LoadBalancerInfo:
         TargetGroupPairInfoList:
           - TargetGroups:
