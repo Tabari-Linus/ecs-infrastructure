@@ -578,7 +578,7 @@ Resources:
                   {
                     "actionName": "Source",
                     "revisionType": "IMAGE_DIGEST",
-                    "revisionValue": <imageDigest>
+                    "revisionValue": "<imageDigest>"
                   }
                 ]
               }
@@ -866,8 +866,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !ImportValue !Sub '${ProjectName}-${Environment}-ECSTaskExecutionRole'
-      TaskRoleArn: !ImportValue !Sub '${ProjectName}-${Environment}-ECSTaskRole'
+      ExecutionRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ecs-task-execution-role'
+      TaskRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ecs-task-role'
       ContainerDefinitions:
         - Name: !Sub '${ProjectName}-${Environment}-app'
           Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Environment}-java-app:${ImageTag}'
@@ -896,15 +896,15 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           Subnets:
-            - !ImportValue !Sub '${ProjectName}-${Environment}-PrivateSubnet1'
-            - !ImportValue !Sub '${ProjectName}-${Environment}-PrivateSubnet2'
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
           SecurityGroups:
-            - !ImportValue !Sub '${ProjectName}-${Environment}-ECSSecurityGroup'
+            - !Ref ECSSecurityGroup
       TaskDefinition: !Ref ECSTaskDefinition
       LoadBalancers:
         - ContainerName: !Sub '${ProjectName}-${Environment}-app'
           ContainerPort: 8080
-          TargetGroupArn: !ImportValue !Sub '${ProjectName}-${Environment}-ECS-TargetGroup'
+          TargetGroupArn: !Ref ECSTargetGroup
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-service'
