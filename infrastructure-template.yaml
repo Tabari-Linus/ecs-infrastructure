@@ -39,6 +39,15 @@ Parameters:
     Default: 'latest'
     Description: 'Docker image tag to deploy'
 
+  Cpu:
+    Type: String
+    Default: '256'
+    Description: 'The number of CPU units reserved for the container.'
+  
+  Memory:
+    Type: String
+    Default: '512'
+    Description: 'The amount of memory (in MiB) reserved for the container.'
 
 Resources:
   # VPC
@@ -833,6 +842,87 @@ Resources:
           Value: !Sub '${ProjectName}-${Environment}-github-actions-role'
         - Key: Environment
           Value: !Ref Environment
+  
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${ProjectName}-${Environment}-cluster'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-cluster'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ECS Task Definition
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-${Environment}-task'
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !ImportValue !Sub '${ProjectName}-${Environment}-ECSTaskExecutionRole'
+      TaskRoleArn: !ImportValue !Sub '${ProjectName}-${Environment}-ECSTaskRole'
+      ContainerDefinitions:
+        - Name: !Sub '${ProjectName}-${Environment}-app'
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Environment}-java-app:${ImageTag}'
+          PortMappings:
+            - ContainerPort: 8080
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub '/ecs/${ProjectName}-${Environment}-task'
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # ECS Service
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub '${ProjectName}-${Environment}-service'
+      Cluster: !Ref ECSCluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !ImportValue !Sub '${ProjectName}-${Environment}-PrivateSubnet1'
+            - !ImportValue !Sub '${ProjectName}-${Environment}-PrivateSubnet2'
+          SecurityGroups:
+            - !ImportValue !Sub '${ProjectName}-${Environment}-ECSSecurityGroup'
+      TaskDefinition: !Ref ECSTaskDefinition
+      LoadBalancers:
+        - ContainerName: !Sub '${ProjectName}-${Environment}-app'
+          ContainerPort: 8080
+          TargetGroupArn: !ImportValue !Sub '${ProjectName}-${Environment}-ECS-TargetGroup'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-service'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudWatch Log Group for ECS Tasks
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}-${Environment}-task'
+      RetentionInDays: 7
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-log-group'
+        - Key: Environment
+          Value: !Ref Environment
+
 
 Outputs:
   VPCId:
@@ -841,114 +931,11 @@ Outputs:
     Export:
       Name: !Sub '${ProjectName}-${Environment}-VPCId'
 
-  VPCCidr:
-    Description: 'VPC CIDR Block'
-    Value: !Ref VpcCidr
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-VPCCidr'
-
-  PublicSubnet1Id:
-    Description: 'Public Subnet 1 ID'
-    Value: !Ref PublicSubnet1
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-PublicSubnet1'
-
-  PublicSubnet2Id:
-    Description: 'Public Subnet 2 ID'
-    Value: !Ref PublicSubnet2
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-PublicSubnet2'
-
-  PrivateSubnet1Id:
-    Description: 'Private Subnet 1 ID'
-    Value: !Ref PrivateSubnet1
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-PrivateSubnet1'
-
-  PrivateSubnet2Id:
-    Description: 'Private Subnet 2 ID'
-    Value: !Ref PrivateSubnet2
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-PrivateSubnet2'
-
-  PublicSubnets:
-    Description: 'Public Subnets for ALB'
-    Value: !Join [',', [!Ref PublicSubnet1, !Ref PublicSubnet2]]
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-PublicSubnets'
-
-  PrivateSubnets:
-    Description: 'Private Subnets for ECS'
-    Value: !Join [',', [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-PrivateSubnets'
-  
-  ALBSecurityGroupId:
-    Description: 'Security Group ID for Application Load Balancer'
-    Value: !Ref ALBSecurityGroup
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ALBSecurityGroup'
-
-  ECSSecurityGroupId:
-    Description: 'Security Group ID for ECS Tasks'
-    Value: !Ref ECSSecurityGroup
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECSSecurityGroup'
-
-  VPCEndpointSecurityGroupId:
-    Description: 'Security Group ID for VPC Endpoints'
-    Value: !Ref VPCEndpointSecurityGroup
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-VPCEndpointSecurityGroup'
-
-
   ApplicationLoadBalancerDNS:
     Description: 'DNS name of the Application Load Balancer'
     Value: !GetAtt ApplicationLoadBalancer.DNSName
     Export:
       Name: !Sub '${ProjectName}-${Environment}-ALB-DNS'
-
-  ApplicationLoadBalancerArn:
-    Description: 'ARN of the Application Load Balancer'
-    Value: !Ref ApplicationLoadBalancer
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ALB-ARN'
-
-  ApplicationLoadBalancerFullName:
-    Description: 'Full name of the Application Load Balancer'
-    Value: !GetAtt ApplicationLoadBalancer.LoadBalancerFullName
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ALB-FullName'
-
-  ECSTargetGroupArn:
-    Description: 'ARN of the main ECS Target Group'
-    Value: !Ref ECSTargetGroup
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECS-TargetGroup'
-
-  ECSTargetGroupBlueArn:
-    Description: 'ARN of the Blue ECS Target Group'
-    Value: !Ref ECSTargetGroupBlue
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECS-TargetGroup-Blue'
-
-  ECSTargetGroupGreenArn:
-    Description: 'ARN of the Green ECS Target Group'
-    Value: !Ref ECSTargetGroupGreen
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECS-TargetGroup-Green'
-
-  HTTPListenerArn:
-    Description: 'ARN of the HTTP Listener'
-    Value: !Ref HTTPListener
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-HTTP-Listener'
-
-  TestListenerArn:
-    Description: 'ARN of the Test Listener for Blue/Green'
-    Value: !Ref TestListener
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-Test-Listener'
 
   ApplicationURL:
     Description: 'URL to access the application'
@@ -956,30 +943,7 @@ Outputs:
     Export:
       Name: !Sub '${ProjectName}-${Environment}-Application-URL'
 
-  ECRRepositoryURI:
-    Description: 'ECR Repository URI'
-    Value: !GetAtt ECRRepository.RepositoryUri
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECR-URI'
-
-  ECRRepositoryName:
-    Description: 'ECR Repository Name'
-    Value: !Ref ECRRepository
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECR-Name'
-
-  ECRRepositoryArn:
-    Description: 'ECR Repository ARN'
-    Value: !GetAtt ECRRepository.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-ECR-ARN'
-
-  EventBridgeRuleArn:
-    Description: 'EventBridge Rule ARN'
-    Value: !GetAtt ECREventRule.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-EventRule-ARN'
-
+  
   ECSTaskExecutionRoleArn:
     Description: 'ECS Task Execution Role ARN'
     Value: !GetAtt ECSTaskExecutionRole.Arn
