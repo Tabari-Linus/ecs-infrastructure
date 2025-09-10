@@ -771,7 +771,7 @@ Resources:
         - ServiceName: !GetAtt ECSService.Name
           ClusterName: !Ref ECSCluster
       LoadBalancerInfo:
-        TargetGroupInfoList:
+        TargetGroupPairInfoList:
           - Name: !GetAtt ECSTargetGroupBlue.TargetGroupName
           - Name: !GetAtt ECSTargetGroupGreen.TargetGroupName
       AutoRollbackConfiguration:
