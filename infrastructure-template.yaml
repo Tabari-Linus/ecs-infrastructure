@@ -772,14 +772,14 @@ Resources:
         TerminateBlueInstancesOnDeploymentSuccess:
           Action: TERMINATE
           TerminationWaitTimeInMinutes: 5
-      ECSServices:
-        - ClusterName: !Ref ECSCluster
-          ServiceName: !Ref ECSService
+      ECSService:
+        ServiceName: !Ref ECSService
+        ClusterName: !Ref ECSCluster
       LoadBalancerInfo:
         TargetGroupPairInfoList:
           - TargetGroups:
-              - TargetGroupArn: !Ref ECSTargetGroupBlue
-              - TargetGroupArn: !Ref ECSTargetGroupGreen
+              - Name: !Ref ECSTargetGroupBlue
+              - Name: !Ref ECSTargetGroupGreen
             ProdTrafficRoute:
               ListenerArns:
                 - !Ref HTTPListener
@@ -958,3 +958,6 @@ Outputs:
     Value: !GetAtt ApplicationLoadBalancer.DNSName
     Export:
       Name: !Sub '${ProjectName}-${Environment}-ALB-DNS'
+
+  PipelineName:
+    Value: !Ref CodePipeline
