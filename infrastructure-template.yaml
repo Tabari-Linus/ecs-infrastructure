@@ -767,8 +767,6 @@ Resources:
           TerminationWaitTimeInMinutes: 1
         DeploymentReadyOption:
           ActionOnTimeout: CONTINUE_DEPLOYMENT
-        GreenFleetProvisioningOption:
-          Action: COPY_AUTO_SCALING_GROUP
       ECSServices:
         - ServiceName: !GetAtt ECSService.Name
           ClusterName: !Ref ECSCluster
@@ -781,6 +779,7 @@ Resources:
         Events:
           - DEPLOYMENT_FAILURE
           - DEPLOYMENT_STOP_ON_ALARM
+
 
   # CodeBuild Project
   CodeBuildProject:
