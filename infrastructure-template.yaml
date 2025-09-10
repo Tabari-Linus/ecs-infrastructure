@@ -840,7 +840,7 @@ Resources:
                   - s3:GetBucketAcl
                   - s3:GetBucketLocation
                 Resource: 
-                  - !Sub '${ArtifactStoreBucket}/*'
+                  - !Sub '${ArtifactStoreBucket.Arn}/*'
                   - !GetAtt ArtifactStoreBucket.Arn
       Tags:
         - Key: Name
