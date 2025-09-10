@@ -772,7 +772,7 @@ Resources:
         TerminateBlueInstancesOnDeploymentSuccess:
           Action: TERMINATE
           TerminationWaitTimeInMinutes: 5
-      EcsServices:
+      ECSServices:
         - ClusterName: !Ref ECSCluster
           ServiceName: !Ref ECSService
       LoadBalancerInfo:
