@@ -560,12 +560,14 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:GetObjectVersion
-                  - s3:GetBucketVersioning
                   - s3:PutObject
                   - s3:PutObjectAcl
-                Resource: 
-                  - !Sub '${ArtifactStoreBucket}/*'
-                  - !GetAtt ArtifactStoreBucket.Arn
+                Resource: !Sub '${ArtifactStoreBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketVersioning
+                  - s3:ListBucket
+                Resource: !GetAtt ArtifactStoreBucket.Arn
               - Effect: Allow
                 Action:
                   - codedeploy:CreateDeployment
@@ -961,3 +963,33 @@ Outputs:
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
     Export:
       Name: !Sub '${ProjectName}-${Environment}-App-URL'
+
+  ECRRepositoryURI:
+    Description: 'ECR Repository URI'
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}'
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-ECR-URI'
+
+  ECSClusterName:
+    Description: 'ECS Cluster Name'
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-ECS-Cluster'
+
+  ECSServiceName:
+    Description: 'ECS Service Name'
+    Value: !Ref ECSService
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-ECS-Service'
+
+  GitHubActionsRoleArn:
+    Description: 'GitHub Actions Role ARN for OIDC'
+    Value: !GetAtt GitHubActionsRole.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-GitHub-Actions-Role-ARN'
+
+  CodePipelineName:
+    Description: 'CodePipeline Name'
+    Value: !Ref CodePipeline
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-Pipeline-Name'
