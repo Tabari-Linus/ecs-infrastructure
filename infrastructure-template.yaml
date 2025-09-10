@@ -752,23 +752,23 @@ Resources:
           Value: !Ref Environment
 
   CodeDeployDeploymentGroup:
-  Type: AWS::CodeDeploy::DeploymentGroup
-  Properties:
-    ApplicationName: !Ref CodeDeployApplication
-    DeploymentGroupName: !Sub '${ProjectName}-${Environment}-deployment-group'
-    ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
-    DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
-    EcsServices:                   # ✅ Correct property
-      - ServiceName: !Ref ECSService
-        ClusterName: !Ref ECSCluster
-    LoadBalancerInfo:
-      TargetGroupPairInfoList:
-        - TargetGroups:
-            - Name: !Ref ECSTargetGroupBlue
-            - Name: !Ref ECSTargetGroupGreen
-          ProdTrafficRoute:
-            ListenerArns:
-              - !Ref HTTPListener
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: !Sub '${ProjectName}-${Environment}-deployment-group'
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
+      EcsServices:
+        - ServiceName: !Ref ECSService
+          ClusterName: !Ref ECSCluster
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - TargetGroups:
+              - Name: !Ref ECSTargetGroupBlue
+              - Name: !Ref ECSTargetGroupGreen
+            ProdTrafficRoute:
+              ListenerArns:
+                - !Ref HTTPListener
 
 
   # CodeBuild Project
