@@ -758,23 +758,9 @@ Resources:
       DeploymentGroupName: !Sub '${ProjectName}-${Environment}-deployment-group'
       ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
       DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
-      DeploymentStyle:
-        DeploymentOption: WITH_TRAFFIC_CONTROL
-        DeploymentType: BLUE_GREEN
-      AutoRollbackConfiguration:
-        Enabled: true
-        Events:
-          - DEPLOYMENT_FAILURE
-      BlueGreenDeploymentConfiguration:
-        DeploymentReadyOption:
-          ActionOnTimeout: CONTINUE_DEPLOYMENT
-          WaitTimeInMinutes: 0
-        TerminateBlueInstancesOnDeploymentSuccess:
-          Action: TERMINATE
-          TerminationWaitTimeInMinutes: 5
-      ECSService:
-        ServiceName: !Ref ECSService
-        ClusterName: !Ref ECSCluster
+      EcsServices:                   # ✅ Correct property
+        - ServiceName: !Ref ECSService
+          ClusterName: !Ref ECSCluster
       LoadBalancerInfo:
         TargetGroupPairInfoList:
           - TargetGroups:
@@ -782,12 +768,8 @@ Resources:
               - Name: !Ref ECSTargetGroupGreen
             ProdTrafficRoute:
               ListenerArns:
-                - !Ref HTTPListener
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-${Environment}-codedeploy-deployment-group'
-        - Key: Environment
-          Value: !Ref Environment
+                - !Ref ECSListener
+
 
   # CodeBuild Project
   CodeBuildProject:
